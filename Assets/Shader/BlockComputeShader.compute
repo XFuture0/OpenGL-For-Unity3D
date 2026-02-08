@@ -1,9 +1,11 @@
 #pragma kernel BlockShader
+#pragma multi_compile_instancing
 struct InstanceData
 {
     float4x4 Transform;
     float4 Color;
 };
+
 RWStructuredBuffer<InstanceData> _InstanceBuffer;
 uint _InstanceCount;
 [numthreads(64,1,1)]

@@ -1,9 +1,8 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class GenPerlinNoiseMap : MonoBehaviour
 {
@@ -24,20 +23,45 @@ public class GenPerlinNoiseMap : MonoBehaviour
     public float scale;
     public Mesh mesh;
     public Material mat;
-    public int LayerCount;
     public float ViewDistance;
+    public int Count;
     private Vector3 CurPart;
     private List<Matrix4x4> BlockMatrices = new List<Matrix4x4>();
     private Dictionary<PartBlockPro,List<Matrix4x4>> PartBlocks = new Dictionary<PartBlockPro,List<Matrix4x4>>();
+    private Mesh NewMesh;
     private void Start()
     {
-        StartGenPerlinNoiseMapPer(LayerCount);
+        // StartGenMap();
+        AddGenPerlinNoiseMapPer(new Vector2(0, 0));
+        foreach (var part in PartBlocks)
+        {
+            var mesh = VertexCombine(part.Key.Count, part.Value);
+            NewMesh = mesh;
+        }
+    }
+    private void StartGenMap()
+    {
+        for(int i = 0; i < Count; i++)
+        {
+            for (int j = 0; j < Count; j++)
+            {
+                AddGenPerlinNoiseMapPer(new Vector2(i, j));
+            }
+        }
     }
     private void Update()
     {
-        UpdateCurPart();
-        CheckPerlinNoiseMapPer();
-        OnGenPerlinNoiseMap();
+        Test();
+        //UpdateCurPart();
+        //CheckPerlinNoiseMapPer();
+        //OnGenPerlinNoiseMap();
+    }
+    private void Test()
+    {
+        foreach (var part in PartBlocks)
+        {
+            Graphics.DrawMeshInstanced(NewMesh, 0, mat,part.Value.ToArray(), 1);
+        }
     }
     private void UpdateCurPart()
     {
@@ -57,23 +81,13 @@ public class GenPerlinNoiseMap : MonoBehaviour
             }
         }
     }
-    private void StartGenPerlinNoiseMapPer(int LayerCount)
-    {
-        for (int i = 0; i < LayerCount; i++)
-        {
-            for (int j = 0; j < LayerCount; j++)
-            {
-                AddGenPerlinNoiseMapPer(new Vector2(i, j));
-            }
-        }
-    }
     private void AddGenPerlinNoiseMapPer(Vector2 AddPart)
     {
         int BlockCount = 0;
         BlockMatrices.Clear();
-        for (int m = 0; m < 50; m++)
+        for (int m = 0; m < 10; m++)
         {
-            for (int n = 0; n < 50; n++)
+            for (int n = 0; n < 10; n++)
             {
                 int GroundHigh = (int)(Mathf.PerlinNoise((50 * AddPart.x + m) * scale, (50 * AddPart.y + n) * scale) * 10);
                 for (int k = 0; k < GroundHigh; k++)
@@ -111,5 +125,39 @@ public class GenPerlinNoiseMap : MonoBehaviour
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z + 1));
         CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * (CurPart.z - 1) + 25);
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z - 1));
+    }
+    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform)
+    {
+        CombineInstance[] combine = new CombineInstance[CombineCount];
+        for (int i = 0; i < CombineCount; i++)
+        {
+            combine[i].mesh = mesh;
+            combine[i].transform = Transform[i];
+        }
+        Mesh newMesh = new Mesh();
+        newMesh.indexFormat = IndexFormat.UInt32;
+        newMesh.CombineMeshes(combine,false);//是否合并原子网格，后续需要分配材质
+        List<int> VisibleTriangles = new List<int>();
+        for(int i = 0;i < newMesh.triangles.Length; i+= 3)
+        {
+            var Vertex1 = newMesh.vertices[newMesh.triangles[i]];
+            var Vertex2 = newMesh.vertices[newMesh.triangles[i + 1]];
+            var Vertex3 = newMesh.vertices[newMesh.triangles[i + 2]];
+            var normal = Vector3.Cross(Vertex2 - Vertex1, Vertex3 - Vertex1).normalized;
+            if(Vector3.Dot(normal, Camera.main.transform.forward) < 0)
+            {
+                VisibleTriangles.Add(newMesh.triangles[i]);
+                VisibleTriangles.Add(newMesh.triangles[i + 1]);
+                VisibleTriangles.Add(newMesh.triangles[i + 2]);
+            }
+        }
+        newMesh.triangles = VisibleTriangles.ToArray();
+        newMesh.RecalculateNormals();  // 修复法线计算
+        newMesh.RecalculateBounds();   // 修复包围盒计算
+        return newMesh;
+    }
+    private void CombineMaterial()
+    {
+
     }
 }

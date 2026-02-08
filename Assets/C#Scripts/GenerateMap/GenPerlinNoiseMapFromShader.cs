@@ -1,9 +1,4 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public class GenPerlinNoiseMapFromShader : MonoBehaviour
 {
@@ -14,6 +9,7 @@ public class GenPerlinNoiseMapFromShader : MonoBehaviour
     private GraphicsBuffer instanceBuffer;
     private GraphicsBuffer IndirectBuffer;
     private int STRIDE = 80;//²½·ù
+    private MaterialPropertyBlock props;
     private void Start()
     {
         StartGenPerlinNoiseMapPer();
@@ -44,6 +40,8 @@ public class GenPerlinNoiseMapFromShader : MonoBehaviour
         IndirectBuffer.SetData(args);
         computeshader.SetBuffer(computeshader.FindKernel("BlockShader"), "_InstanceBuffer", instanceBuffer);
         computeshader.SetInt("_InstanceCount", InstanceCount);
+        props = new MaterialPropertyBlock();
+        props.SetBuffer("_InstanceBuffer", instanceBuffer);
         computeshader.Dispatch(
             computeshader.FindKernel("BlockShader"),
             Mathf.CeilToInt(InstanceCount / 64f), 1, 1
@@ -57,7 +55,8 @@ public class GenPerlinNoiseMapFromShader : MonoBehaviour
             mat,
             new Bounds(new Vector3(0,0,0),new Vector3(200,200,200)),
             IndirectBuffer,
-            0
+            0,
+            props
             );
     }
     private void OnDestroy()
