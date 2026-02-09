@@ -35,7 +35,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
         AddGenPerlinNoiseMapPer(new Vector2(0, 0));
         foreach (var part in PartBlocks)
         {
-            var mesh = VertexCombine(part.Key.Count, part.Value);
+            var mesh = VertexCombine(part.Key.Count, part.Value,new Vector2(0,0));
             NewMesh = mesh;
         }
     }
@@ -104,6 +104,48 @@ public class GenPerlinNoiseMap : MonoBehaviour
         CurBlockPro.PartOffect = new Vector3(50 * AddPart.x + 25, 0, 50 * AddPart.y + 25);
         PartBlocks.Add(CurBlockPro, CurBlockMatrices);
     }
+    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform,Vector2 CombinePart)
+    {
+        CombineInstance[] combine = new CombineInstance[CombineCount];
+        for (int i = 0; i < CombineCount; i++)
+        {
+            combine[i].mesh = mesh;
+            combine[i].transform = Transform[i];
+        }
+        Mesh newMesh = new Mesh();
+        newMesh.indexFormat = IndexFormat.UInt32;
+        newMesh.CombineMeshes(combine,false);//是否合并原子网格，后续需要分配材质
+        List<int> VisibleTriangles = new List<int>();
+        for(int i = 0;i < newMesh.triangles.Length; i+= 3)
+        {
+            var Vertex1 = newMesh.vertices[newMesh.triangles[i]];
+            var Vertex2 = newMesh.vertices[newMesh.triangles[i + 1]];
+            var Vertex3 = newMesh.vertices[newMesh.triangles[i + 2]];
+            bool IsVisible1 = VertexDeepTest(Vertex1,CombinePart);
+            bool IsVisible2 = VertexDeepTest(Vertex2, CombinePart);
+            bool IsVisible3 = VertexDeepTest(Vertex3, CombinePart);
+            if(IsVisible1 && IsVisible2 && IsVisible3)
+            {
+                VisibleTriangles.Add(newMesh.triangles[i]);
+                VisibleTriangles.Add(newMesh.triangles[i + 1]);
+                VisibleTriangles.Add(newMesh.triangles[i + 2]);
+            }
+        }
+        newMesh.triangles = VisibleTriangles.ToArray();
+        newMesh.RecalculateNormals();  // 修复法线计算
+        newMesh.RecalculateBounds();   // 修复包围盒计算
+        return newMesh;
+    }
+    private bool VertexDeepTest(Vector3 Vertex,Vector2 CombinePart)
+    {
+        var GroundHigh1 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh2 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x - 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh3 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x + 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh4 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z - 1) * scale) * 10);
+        var GroundHigh5 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z + 1) * scale) * 10);
+        var GroundHighMin = Mathf.Min(GroundHigh1, GroundHigh2, GroundHigh3, GroundHigh4, GroundHigh5);
+        return Vertex.y >= GroundHighMin - 1;
+    }
     private void CheckPerlinNoiseMapPer()
     {
         var CheckPart = new PartBlockPro();
@@ -125,39 +167,5 @@ public class GenPerlinNoiseMap : MonoBehaviour
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z + 1));
         CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * (CurPart.z - 1) + 25);
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z - 1));
-    }
-    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform)
-    {
-        CombineInstance[] combine = new CombineInstance[CombineCount];
-        for (int i = 0; i < CombineCount; i++)
-        {
-            combine[i].mesh = mesh;
-            combine[i].transform = Transform[i];
-        }
-        Mesh newMesh = new Mesh();
-        newMesh.indexFormat = IndexFormat.UInt32;
-        newMesh.CombineMeshes(combine,false);//是否合并原子网格，后续需要分配材质
-        List<int> VisibleTriangles = new List<int>();
-        for(int i = 0;i < newMesh.triangles.Length; i+= 3)
-        {
-            var Vertex1 = newMesh.vertices[newMesh.triangles[i]];
-            var Vertex2 = newMesh.vertices[newMesh.triangles[i + 1]];
-            var Vertex3 = newMesh.vertices[newMesh.triangles[i + 2]];
-            var normal = Vector3.Cross(Vertex2 - Vertex1, Vertex3 - Vertex1).normalized;
-            if(Vector3.Dot(normal, Camera.main.transform.forward) < 0)
-            {
-                VisibleTriangles.Add(newMesh.triangles[i]);
-                VisibleTriangles.Add(newMesh.triangles[i + 1]);
-                VisibleTriangles.Add(newMesh.triangles[i + 2]);
-            }
-        }
-        newMesh.triangles = VisibleTriangles.ToArray();
-        newMesh.RecalculateNormals();  // 修复法线计算
-        newMesh.RecalculateBounds();   // 修复包围盒计算
-        return newMesh;
-    }
-    private void CombineMaterial()
-    {
-
     }
 }
