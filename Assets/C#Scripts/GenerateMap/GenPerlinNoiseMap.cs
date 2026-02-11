@@ -1,9 +1,10 @@
-using System;
 using System.Collections.Generic;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
-
 public class GenPerlinNoiseMap : MonoBehaviour
 {
     public class PartBlockPro
@@ -85,9 +86,9 @@ public class GenPerlinNoiseMap : MonoBehaviour
     {
         int BlockCount = 0;
         BlockMatrices.Clear();
-        for (int m = 0; m < 10; m++)
+        for (int m = 0; m < 50; m++)
         {
-            for (int n = 0; n < 10; n++)
+            for (int n = 0; n < 50; n++)
             {
                 int GroundHigh = (int)(Mathf.PerlinNoise((50 * AddPart.x + m) * scale, (50 * AddPart.y + n) * scale) * 10);
                 for (int k = 0; k < GroundHigh; k++)
@@ -106,17 +107,49 @@ public class GenPerlinNoiseMap : MonoBehaviour
     }
     private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform,Vector2 CombinePart)
     {
-        CombineInstance[] combine = new CombineInstance[CombineCount];
-        for (int i = 0; i < CombineCount; i++)
-        {
-            combine[i].mesh = mesh;
-            combine[i].transform = Transform[i];
-        }
         Mesh newMesh = new Mesh();
         newMesh.indexFormat = IndexFormat.UInt32;
-        newMesh.CombineMeshes(combine,false);//是否合并原子网格，后续需要分配材质
-        List<int> VisibleTriangles = new List<int>();
-        for(int i = 0;i < newMesh.triangles.Length; i+= 3)
+        NativeArray<Vector3> Position = new NativeArray<Vector3>(CombineCount, Allocator.TempJob);
+        for(int i = 0;i < Transform.Count; i++)
+        {
+            Position[i] = Transform[i].GetPosition();
+        }
+        NativeArray<Vector2> Mesh_UV = new NativeArray<Vector2>(StaticBlock.Cube_UV.Length, Allocator.TempJob);
+        NativeArray<Vector3> Mesh_Vertex = new NativeArray<Vector3>(StaticBlock.Cube_Vertex.Length, Allocator.TempJob);
+        NativeArray<int> Mesh_Index = new NativeArray<int>(StaticBlock.Cube_Index.Length, Allocator.TempJob);
+        Mesh_UV.CopyFrom(StaticBlock.Cube_UV);
+        Mesh_Vertex.CopyFrom(StaticBlock.Cube_Vertex);
+        Mesh_Index.CopyFrom(StaticBlock.Cube_Index);
+        NativeArray<Vector3> CombineVertex = new NativeArray<Vector3>(mesh.vertexCount * CombineCount, Allocator.TempJob);
+        NativeArray<Vector2> CombineUV = new NativeArray<Vector2>(mesh.uv.Length * CombineCount, Allocator.TempJob);
+        NativeArray<int> CombineIndex = new NativeArray<int>(mesh.triangles.Length * CombineCount, Allocator.TempJob);
+        CombineMeshJob combineMeshJob = new CombineMeshJob
+        {
+            Position = Position,
+            Mesh_Vertex = Mesh_Vertex,
+            Mesh_UV = Mesh_UV,
+            Mesh_Triangles = Mesh_Index,
+            CombineCount = CombineCount,
+            CombinesVertex = CombineVertex,
+            CombineUV = CombineUV,
+            CombinesIndex = CombineIndex
+        };
+        var CombineMeshJobHandle = combineMeshJob.Schedule();
+        CombineMeshJobHandle.Complete();
+        newMesh.vertices = CombineVertex.ToArray();
+        newMesh.triangles = CombineIndex.ToArray();
+        newMesh.uv = CombineUV.ToArray();
+        Position.Dispose();
+        Mesh_UV.Dispose();
+        Mesh_Vertex.Dispose();
+        Mesh_Index.Dispose();
+        CombineVertex.Dispose();
+        CombineUV.Dispose();
+        CombineIndex.Dispose();
+        newMesh.RecalculateNormals();  // 修复法线计算
+        newMesh.RecalculateBounds();   // 修复包围盒计算
+       /* List<int> VisibleTriangles = new List<int>();
+        for (int i = 0;i < newMesh.triangles.Length; i+= 3)
         {
             var Vertex1 = newMesh.vertices[newMesh.triangles[i]];
             var Vertex2 = newMesh.vertices[newMesh.triangles[i + 1]];
@@ -124,7 +157,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
             bool IsVisible1 = VertexDeepTest(Vertex1,CombinePart);
             bool IsVisible2 = VertexDeepTest(Vertex2, CombinePart);
             bool IsVisible3 = VertexDeepTest(Vertex3, CombinePart);
-            if(IsVisible1 && IsVisible2 && IsVisible3)
+            if (IsVisible1 && IsVisible2 && IsVisible3)
             {
                 VisibleTriangles.Add(newMesh.triangles[i]);
                 VisibleTriangles.Add(newMesh.triangles[i + 1]);
@@ -133,9 +166,10 @@ public class GenPerlinNoiseMap : MonoBehaviour
         }
         newMesh.triangles = VisibleTriangles.ToArray();
         newMesh.RecalculateNormals();  // 修复法线计算
-        newMesh.RecalculateBounds();   // 修复包围盒计算
+        newMesh.RecalculateBounds();   // 修复包围盒计算*/
         return newMesh;
     }
+    
     private bool VertexDeepTest(Vector3 Vertex,Vector2 CombinePart)
     {
         var GroundHigh1 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
@@ -167,5 +201,36 @@ public class GenPerlinNoiseMap : MonoBehaviour
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z + 1));
         CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * (CurPart.z - 1) + 25);
         if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z - 1));
+    }
+}
+[BurstCompile]
+public struct CombineMeshJob : IJob
+{
+    public NativeArray<Vector3> Position;
+    public int CombineCount;
+    public NativeArray<Vector3> Mesh_Vertex;
+    public NativeArray<Vector2> Mesh_UV;
+    public NativeArray<int> Mesh_Triangles;
+    public NativeArray<Vector3> CombinesVertex;
+    public NativeArray<Vector2> CombineUV;
+    public NativeArray<int> CombinesIndex;
+    public void Execute()
+    {
+        int TotalVertices = 0;
+        int TotalIndex = 0;
+        for (int i = 0; i < CombineCount; i++)
+        {
+            for(int j = 0;j < Mesh_Vertex.Length; j++)
+            {
+                CombinesVertex[TotalVertices + j] = Mesh_Vertex[j] + Position[i];
+                CombineUV[TotalVertices + j] = Mesh_UV[j];
+            }
+            for (int j = 0; j < Mesh_Triangles.Length; j++)
+            {
+                CombinesIndex[TotalIndex + j] = Mesh_Triangles[j] + Mesh_Vertex.Length * i;
+            }
+            TotalIndex += Mesh_Triangles.Length;
+            TotalVertices += Mesh_Vertex.Length;
+        }
     }
 }
