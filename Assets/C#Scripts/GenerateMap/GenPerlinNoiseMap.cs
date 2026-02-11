@@ -1,16 +1,21 @@
+using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.Rendering;
+using UnityEngine.UIElements;
 public class GenPerlinNoiseMap : MonoBehaviour
 {
     public class PartBlockPro
     {
         public int Count;
         public Vector3 PartOffect;
+        public Mesh PartMesh;
         public override bool Equals(object obj)
         {
             return obj is PartBlockPro other &&
@@ -32,13 +37,13 @@ public class GenPerlinNoiseMap : MonoBehaviour
     private Mesh NewMesh;
     private void Start()
     {
-        // StartGenMap();
-        AddGenPerlinNoiseMapPer(new Vector2(0, 0));
+        StartGenMap();
+       /* AddGenPerlinNoiseMapPer(new Vector2(0, 0));
         foreach (var part in PartBlocks)
         {
             var mesh = VertexCombine(part.Key.Count, part.Value,new Vector2(0,0));
             NewMesh = mesh;
-        }
+        }*/
     }
     private void StartGenMap()
     {
@@ -52,18 +57,17 @@ public class GenPerlinNoiseMap : MonoBehaviour
     }
     private void Update()
     {
-        Test();
-        //UpdateCurPart();
-        //CheckPerlinNoiseMapPer();
-        //OnGenPerlinNoiseMap();
+     //   UpdateCurPart();
+     //   CheckPerlinNoiseMapPer();
+        OnGenPerlinNoiseMap();
     }
-    private void Test()
+   /* private void Test()
     {
         foreach (var part in PartBlocks)
         {
             Graphics.DrawMeshInstanced(NewMesh, 0, mat,part.Value.ToArray(), 1);
         }
-    }
+    }*/
     private void UpdateCurPart()
     {
         var CameraPosition = Camera.main.transform.position;
@@ -78,7 +82,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
             var PartDistance = math.abs(Vector3.Distance(Camera.main.transform.position,part.Key.PartOffect));
             if(PartDistance < ViewDistance)
             {
-                Graphics.DrawMeshInstanced(mesh, 0, mat, part.Value.ToArray(), part.Key.Count);
+                Graphics.DrawMeshInstanced(part.Key.PartMesh, 0, mat, part.Value.ToArray(),1);
             }
         }
     }
@@ -93,7 +97,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
                 int GroundHigh = (int)(Mathf.PerlinNoise((50 * AddPart.x + m) * scale, (50 * AddPart.y + n) * scale) * 10);
                 for (int k = 0; k < GroundHigh; k++)
                 {
-                    BlockMatrices.Add(Matrix4x4.TRS(new Vector3(50 * AddPart.x + m, k, 50 * AddPart.y + n), Quaternion.identity, Vector3.one));
+                    BlockMatrices.Add(Matrix4x4.TRS(new Vector3(25 * AddPart.x + m, k, 25 * AddPart.y + n), Quaternion.identity, Vector3.one));
                     BlockCount++;
                 }
             }
@@ -101,8 +105,10 @@ public class GenPerlinNoiseMap : MonoBehaviour
         var CurBlockMatrices = new List<Matrix4x4>();
         CurBlockMatrices.AddRange(BlockMatrices);
         var CurBlockPro = new PartBlockPro();
+        var mesh = VertexCombine(BlockCount, BlockMatrices, AddPart);
         CurBlockPro.Count = BlockCount;
         CurBlockPro.PartOffect = new Vector3(50 * AddPart.x + 25, 0, 50 * AddPart.y + 25);
+        CurBlockPro.PartMesh = mesh;
         PartBlocks.Add(CurBlockPro, CurBlockMatrices);
     }
     private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform,Vector2 CombinePart)
@@ -117,12 +123,12 @@ public class GenPerlinNoiseMap : MonoBehaviour
         NativeArray<Vector2> Mesh_UV = new NativeArray<Vector2>(StaticBlock.Cube_UV.Length, Allocator.TempJob);
         NativeArray<Vector3> Mesh_Vertex = new NativeArray<Vector3>(StaticBlock.Cube_Vertex.Length, Allocator.TempJob);
         NativeArray<int> Mesh_Index = new NativeArray<int>(StaticBlock.Cube_Index.Length, Allocator.TempJob);
-        Mesh_UV.CopyFrom(StaticBlock.Cube_UV);
-        Mesh_Vertex.CopyFrom(StaticBlock.Cube_Vertex);
-        Mesh_Index.CopyFrom(StaticBlock.Cube_Index);
         NativeArray<Vector3> CombineVertex = new NativeArray<Vector3>(mesh.vertexCount * CombineCount, Allocator.TempJob);
         NativeArray<Vector2> CombineUV = new NativeArray<Vector2>(mesh.uv.Length * CombineCount, Allocator.TempJob);
         NativeArray<int> CombineIndex = new NativeArray<int>(mesh.triangles.Length * CombineCount, Allocator.TempJob);
+        Mesh_UV.CopyFrom(StaticBlock.Cube_UV);
+        Mesh_Vertex.CopyFrom(StaticBlock.Cube_Vertex);
+        Mesh_Index.CopyFrom(StaticBlock.Cube_Index);
         CombineMeshJob combineMeshJob = new CombineMeshJob
         {
             Position = Position,
@@ -148,37 +154,28 @@ public class GenPerlinNoiseMap : MonoBehaviour
         CombineIndex.Dispose();
         newMesh.RecalculateNormals();  // –ﬁ∏¥∑®œﬂº∆À„
         newMesh.RecalculateBounds();   // –ﬁ∏¥∞¸Œß∫–º∆À„
-       /* List<int> VisibleTriangles = new List<int>();
-        for (int i = 0;i < newMesh.triangles.Length; i+= 3)
+       /* NativeArray<Vector3> BaseVertex = new NativeArray<Vector3>(newMesh.vertices.Length, Allocator.TempJob);
+        NativeArray<int> BaseTriangles = new NativeArray<int>(newMesh.triangles.Length, Allocator.TempJob);
+        NativeArray<int> VisibleTrianglesIndex = new NativeArray<int>(newMesh.triangles.Length, Allocator.TempJob);
+        BaseVertex.CopyFrom(newMesh.vertices);
+        BaseTriangles.CopyFrom(newMesh.triangles);
+        FaceCullingJob faceCullingJob = new FaceCullingJob
         {
-            var Vertex1 = newMesh.vertices[newMesh.triangles[i]];
-            var Vertex2 = newMesh.vertices[newMesh.triangles[i + 1]];
-            var Vertex3 = newMesh.vertices[newMesh.triangles[i + 2]];
-            bool IsVisible1 = VertexDeepTest(Vertex1,CombinePart);
-            bool IsVisible2 = VertexDeepTest(Vertex2, CombinePart);
-            bool IsVisible3 = VertexDeepTest(Vertex3, CombinePart);
-            if (IsVisible1 && IsVisible2 && IsVisible3)
-            {
-                VisibleTriangles.Add(newMesh.triangles[i]);
-                VisibleTriangles.Add(newMesh.triangles[i + 1]);
-                VisibleTriangles.Add(newMesh.triangles[i + 2]);
-            }
-        }
-        newMesh.triangles = VisibleTriangles.ToArray();
+            scale = scale,
+            CombinePart = CombinePart,
+            BaseTriangles = BaseTriangles,
+            BaseVertex = BaseVertex,
+            VisibleTrianglesIndex = VisibleTrianglesIndex
+        };
+        var faceCullingJobHandle = faceCullingJob.Schedule();
+        faceCullingJobHandle.Complete();
+        newMesh.triangles = VisibleTrianglesIndex.ToArray();
+        BaseVertex.Dispose();
+        BaseTriangles.Dispose();
+        VisibleTrianglesIndex.Dispose();
         newMesh.RecalculateNormals();  // –ﬁ∏¥∑®œﬂº∆À„
         newMesh.RecalculateBounds();   // –ﬁ∏¥∞¸Œß∫–º∆À„*/
         return newMesh;
-    }
-    
-    private bool VertexDeepTest(Vector3 Vertex,Vector2 CombinePart)
-    {
-        var GroundHigh1 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh2 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x - 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh3 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x + 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh4 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z - 1) * scale) * 10);
-        var GroundHigh5 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z + 1) * scale) * 10);
-        var GroundHighMin = Mathf.Min(GroundHigh1, GroundHigh2, GroundHigh3, GroundHigh4, GroundHigh5);
-        return Vertex.y >= GroundHighMin - 1;
     }
     private void CheckPerlinNoiseMapPer()
     {
@@ -232,5 +229,44 @@ public struct CombineMeshJob : IJob
             TotalIndex += Mesh_Triangles.Length;
             TotalVertices += Mesh_Vertex.Length;
         }
+    }
+}
+[BurstCompile]
+public struct FaceCullingJob : IJob
+{
+    public float scale;
+    public Vector2 CombinePart;
+    public NativeArray<int> BaseTriangles;
+    public NativeArray<Vector3> BaseVertex;
+    public NativeArray<int> VisibleTrianglesIndex;
+    public void Execute()
+    {
+        int VisibleTrianglesCount = 0;
+        for (int i = 0; i < BaseTriangles.Length; i += 3)
+        {
+            var Vertex1 = BaseVertex[BaseTriangles[i]];
+            var Vertex2 = BaseVertex[BaseTriangles[i + 1]];
+            var Vertex3 = BaseVertex[BaseTriangles[i + 2]];
+            bool IsVisible1 = VertexDeepTest(Vertex1, CombinePart);
+            bool IsVisible2 = VertexDeepTest(Vertex2, CombinePart);
+            bool IsVisible3 = VertexDeepTest(Vertex3, CombinePart);
+            if (IsVisible1 && IsVisible2 && IsVisible3)
+            {
+                VisibleTrianglesIndex[VisibleTrianglesCount] = BaseTriangles[i];
+                VisibleTrianglesIndex[VisibleTrianglesCount + 1] = BaseTriangles[i + 1];
+                VisibleTrianglesIndex[VisibleTrianglesCount + 2] = BaseTriangles[i + 2];
+                VisibleTrianglesCount += 3;
+            }
+        }
+    }
+    private bool VertexDeepTest(Vector3 Vertex, Vector2 CombinePart)
+    {
+        var GroundHigh1 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh2 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x - 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh3 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x + 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
+        var GroundHigh4 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z - 1) * scale) * 10);
+        var GroundHigh5 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z + 1) * scale) * 10);
+        var GroundHighMin = Mathf.Min(GroundHigh1, GroundHigh2, GroundHigh3, GroundHigh4, GroundHigh5);
+        return Vertex.y >= GroundHighMin - 1;
     }
 }
