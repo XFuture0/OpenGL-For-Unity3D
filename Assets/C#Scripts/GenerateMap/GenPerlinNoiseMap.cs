@@ -1,21 +1,19 @@
-using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
-using UnityEngine.AI;
 using UnityEngine.Rendering;
-using UnityEngine.UIElements;
 public class GenPerlinNoiseMap : MonoBehaviour
 {
-    public class PartBlockPro
+    private class PartBlockPro
     {
         public int Count;
         public Vector3 PartOffect;
         public Mesh PartMesh;
+        public LodLayer lodLayer;
         public override bool Equals(object obj)
         {
             return obj is PartBlockPro other &&
@@ -27,10 +25,11 @@ public class GenPerlinNoiseMap : MonoBehaviour
         }
     }
     public float scale;
-    public Mesh mesh;
     public Material mat;
     public float ViewDistance;
-    public int Count;
+    public int LayerCount;
+    public int Lod1_LayerCount;
+    public int Lod2_LayerCount;
     private Vector3 CurPart;
     private List<Matrix4x4> BlockMatrices = new List<Matrix4x4>();
     private Dictionary<PartBlockPro,List<Matrix4x4>> PartBlocks = new Dictionary<PartBlockPro,List<Matrix4x4>>();
@@ -38,36 +37,25 @@ public class GenPerlinNoiseMap : MonoBehaviour
     private void Start()
     {
         StartGenMap();
-       /* AddGenPerlinNoiseMapPer(new Vector2(0, 0));
-        foreach (var part in PartBlocks)
-        {
-            var mesh = VertexCombine(part.Key.Count, part.Value,new Vector2(0,0));
-            NewMesh = mesh;
-        }*/
     }
     private void StartGenMap()
     {
-        for(int i = 0; i < Count; i++)
+        for(int i = 0; i < LayerCount; i++)
         {
-            for (int j = 0; j < Count; j++)
+            for (int j = 0; j < LayerCount; j++)
             {
                 AddGenPerlinNoiseMapPer(new Vector2(i, j));
+                AddGenPerlinNoiseMapPer(new Vector2(-i - 1, j));
+                AddGenPerlinNoiseMapPer(new Vector2(i, -j - 1));
+                AddGenPerlinNoiseMapPer(new Vector2(-i - 1, -j - 1));
             }
         }
     }
     private void Update()
     {
-     //   UpdateCurPart();
-     //   CheckPerlinNoiseMapPer();
+        UpdateCurPart();
         OnGenPerlinNoiseMap();
     }
-   /* private void Test()
-    {
-        foreach (var part in PartBlocks)
-        {
-            Graphics.DrawMeshInstanced(NewMesh, 0, mat,part.Value.ToArray(), 1);
-        }
-    }*/
     private void UpdateCurPart()
     {
         var CameraPosition = Camera.main.transform.position;
@@ -79,10 +67,10 @@ public class GenPerlinNoiseMap : MonoBehaviour
     {
         foreach (var part in PartBlocks)
         {
-            var PartDistance = math.abs(Vector3.Distance(Camera.main.transform.position,part.Key.PartOffect));
-            if(PartDistance < ViewDistance)
+            bool IsFade = RefreshPartBlockLodLayer(part.Key,part.Value,CurPart, part.Key.PartOffect);
+            if (!IsFade)
             {
-                Graphics.DrawMeshInstanced(part.Key.PartMesh, 0, mat, part.Value.ToArray(),1);
+                Graphics.DrawMeshInstanced(part.Key.PartMesh, 0, mat, part.Value.ToArray(), 1);
             }
         }
     }
@@ -102,16 +90,18 @@ public class GenPerlinNoiseMap : MonoBehaviour
                 }
             }
         }
-        var CurBlockMatrices = new List<Matrix4x4>();
-        CurBlockMatrices.AddRange(BlockMatrices);
         var CurBlockPro = new PartBlockPro();
-        var mesh = VertexCombine(BlockCount, BlockMatrices, AddPart);
-        CurBlockPro.Count = BlockCount;
         CurBlockPro.PartOffect = new Vector3(50 * AddPart.x + 25, 0, 50 * AddPart.y + 25);
-        CurBlockPro.PartMesh = mesh;
-        PartBlocks.Add(CurBlockPro, CurBlockMatrices);
+        if (!PartBlocks.ContainsKey(CurBlockPro))
+        {
+            var CurBlockMatrices = new List<Matrix4x4>();
+            CurBlockMatrices.AddRange(BlockMatrices);
+            CurBlockPro.Count = BlockCount;
+            CurBlockPro.lodLayer = LodLayer.NULL;
+            PartBlocks.Add(CurBlockPro, CurBlockMatrices);
+        }
     }
-    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform,Vector2 CombinePart)
+    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform, Vector3[] Cube_Vertex, int[] Cube_Index, Vector2[] Cube_UV)
     {
         Mesh newMesh = new Mesh();
         newMesh.indexFormat = IndexFormat.UInt32;
@@ -120,15 +110,15 @@ public class GenPerlinNoiseMap : MonoBehaviour
         {
             Position[i] = Transform[i].GetPosition();
         }
-        NativeArray<Vector2> Mesh_UV = new NativeArray<Vector2>(StaticBlock.Cube_UV.Length, Allocator.TempJob);
-        NativeArray<Vector3> Mesh_Vertex = new NativeArray<Vector3>(StaticBlock.Cube_Vertex.Length, Allocator.TempJob);
-        NativeArray<int> Mesh_Index = new NativeArray<int>(StaticBlock.Cube_Index.Length, Allocator.TempJob);
-        NativeArray<Vector3> CombineVertex = new NativeArray<Vector3>(mesh.vertexCount * CombineCount, Allocator.TempJob);
-        NativeArray<Vector2> CombineUV = new NativeArray<Vector2>(mesh.uv.Length * CombineCount, Allocator.TempJob);
-        NativeArray<int> CombineIndex = new NativeArray<int>(mesh.triangles.Length * CombineCount, Allocator.TempJob);
-        Mesh_UV.CopyFrom(StaticBlock.Cube_UV);
-        Mesh_Vertex.CopyFrom(StaticBlock.Cube_Vertex);
-        Mesh_Index.CopyFrom(StaticBlock.Cube_Index);
+        NativeArray<Vector2> Mesh_UV = new NativeArray<Vector2>(Cube_UV.Length, Allocator.TempJob);
+        NativeArray<Vector3> Mesh_Vertex = new NativeArray<Vector3>(Cube_Vertex.Length, Allocator.TempJob);
+        NativeArray<int> Mesh_Index = new NativeArray<int>(Cube_Index.Length, Allocator.TempJob);
+        NativeArray<Vector3> CombineVertex = new NativeArray<Vector3>(Cube_Vertex.Length * CombineCount, Allocator.TempJob);
+        NativeArray<Vector2> CombineUV = new NativeArray<Vector2>(Cube_UV.Length * CombineCount, Allocator.TempJob);
+        NativeArray<int> CombineIndex = new NativeArray<int>(Cube_Index.Length * CombineCount, Allocator.TempJob);
+        Mesh_UV.CopyFrom(Cube_UV);
+        Mesh_Vertex.CopyFrom(Cube_Vertex);
+        Mesh_Index.CopyFrom(Cube_Index);
         CombineMeshJob combineMeshJob = new CombineMeshJob
         {
             Position = Position,
@@ -154,50 +144,32 @@ public class GenPerlinNoiseMap : MonoBehaviour
         CombineIndex.Dispose();
         newMesh.RecalculateNormals();  // –ﬁ∏¥∑®œﬂº∆À„
         newMesh.RecalculateBounds();   // –ﬁ∏¥∞¸Œß∫–º∆À„
-       /* NativeArray<Vector3> BaseVertex = new NativeArray<Vector3>(newMesh.vertices.Length, Allocator.TempJob);
-        NativeArray<int> BaseTriangles = new NativeArray<int>(newMesh.triangles.Length, Allocator.TempJob);
-        NativeArray<int> VisibleTrianglesIndex = new NativeArray<int>(newMesh.triangles.Length, Allocator.TempJob);
-        BaseVertex.CopyFrom(newMesh.vertices);
-        BaseTriangles.CopyFrom(newMesh.triangles);
-        FaceCullingJob faceCullingJob = new FaceCullingJob
-        {
-            scale = scale,
-            CombinePart = CombinePart,
-            BaseTriangles = BaseTriangles,
-            BaseVertex = BaseVertex,
-            VisibleTrianglesIndex = VisibleTrianglesIndex
-        };
-        var faceCullingJobHandle = faceCullingJob.Schedule();
-        faceCullingJobHandle.Complete();
-        newMesh.triangles = VisibleTrianglesIndex.ToArray();
-        BaseVertex.Dispose();
-        BaseTriangles.Dispose();
-        VisibleTrianglesIndex.Dispose();
-        newMesh.RecalculateNormals();  // –ﬁ∏¥∑®œﬂº∆À„
-        newMesh.RecalculateBounds();   // –ﬁ∏¥∞¸Œß∫–º∆À„*/
         return newMesh;
     }
-    private void CheckPerlinNoiseMapPer()
+    private bool RefreshPartBlockLodLayer(PartBlockPro PartBlockPro, List<Matrix4x4> Transform, Vector3 CurPart, Vector3 PartOffect)
     {
-        var CheckPart = new PartBlockPro();
-        CheckPart.PartOffect = new Vector3(50 * CurPart.x + 25, 0, 50 * CurPart.z + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x, CurPart.z));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x + 1) + 25, 0, 50 * CurPart.z + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x + 1, CurPart.z));
-        CheckPart.PartOffect = new Vector3(50 * CurPart.x + 25, 0, 50 * (CurPart.z + 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x, CurPart.z + 1));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * CurPart.z + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z));
-        CheckPart.PartOffect = new Vector3(50 * CurPart.x + 25, 0, 50 * (CurPart.z - 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x, CurPart.z - 1));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x + 1) + 25, 0, 50 * (CurPart.z + 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x + 1, CurPart.z + 1));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x + 1) + 25, 0, 50 * (CurPart.z - 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x + 1, CurPart.z - 1));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * (CurPart.z + 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z + 1));
-        CheckPart.PartOffect = new Vector3(50 * (CurPart.x - 1) + 25, 0, 50 * (CurPart.z - 1) + 25);
-        if (!PartBlocks.ContainsKey(CheckPart)) AddGenPerlinNoiseMapPer(new Vector2(CurPart.x - 1, CurPart.z - 1));
+        bool IsFade = false;
+        Vector3 PartOffect_Normal = new Vector3((PartOffect.x - 25) / 50, 0, (PartOffect.z - 25) / 50);
+        var LodDistance = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z) ? math.abs(PartOffect_Normal.x - CurPart.x) : math.abs(PartOffect_Normal.z - CurPart.z);
+        bool IsOffectX = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z);
+        if (PartOffect_Normal.x > CurPart.x && IsOffectX || PartOffect_Normal.z >CurPart.z && !IsOffectX) LodDistance++;
+        if (LodDistance <= Lod1_LayerCount && PartBlockPro.lodLayer != LodLayer.Lod_Top)
+        {
+            PartBlockPro.lodLayer = LodLayer.Lod_Top;
+            PartBlockPro.PartMesh = VertexCombine(PartBlockPro.Count,Transform,StaticBlock_Lod_Top.Cube_Vertex,StaticBlock_Lod_Top.Cube_Index,StaticBlock_Lod_Top.Cube_UV);
+        }
+        else if(LodDistance > Lod1_LayerCount && LodDistance <= Lod2_LayerCount && PartBlockPro.lodLayer != LodLayer.Lod_Middle)
+        {
+            PartBlockPro.lodLayer = LodLayer.Lod_Middle;
+            PartBlockPro.PartMesh = VertexCombine(PartBlockPro.Count, Transform, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
+        }
+        else if(LodDistance > Lod2_LayerCount && PartBlockPro.lodLayer != LodLayer.Lod_Bottom)
+        {
+            PartBlockPro.lodLayer = LodLayer.Lod_Bottom;
+            PartBlockPro.PartMesh = new Mesh();
+            IsFade = true;
+        }
+        return IsFade;
     }
 }
 [BurstCompile]
@@ -229,44 +201,5 @@ public struct CombineMeshJob : IJob
             TotalIndex += Mesh_Triangles.Length;
             TotalVertices += Mesh_Vertex.Length;
         }
-    }
-}
-[BurstCompile]
-public struct FaceCullingJob : IJob
-{
-    public float scale;
-    public Vector2 CombinePart;
-    public NativeArray<int> BaseTriangles;
-    public NativeArray<Vector3> BaseVertex;
-    public NativeArray<int> VisibleTrianglesIndex;
-    public void Execute()
-    {
-        int VisibleTrianglesCount = 0;
-        for (int i = 0; i < BaseTriangles.Length; i += 3)
-        {
-            var Vertex1 = BaseVertex[BaseTriangles[i]];
-            var Vertex2 = BaseVertex[BaseTriangles[i + 1]];
-            var Vertex3 = BaseVertex[BaseTriangles[i + 2]];
-            bool IsVisible1 = VertexDeepTest(Vertex1, CombinePart);
-            bool IsVisible2 = VertexDeepTest(Vertex2, CombinePart);
-            bool IsVisible3 = VertexDeepTest(Vertex3, CombinePart);
-            if (IsVisible1 && IsVisible2 && IsVisible3)
-            {
-                VisibleTrianglesIndex[VisibleTrianglesCount] = BaseTriangles[i];
-                VisibleTrianglesIndex[VisibleTrianglesCount + 1] = BaseTriangles[i + 1];
-                VisibleTrianglesIndex[VisibleTrianglesCount + 2] = BaseTriangles[i + 2];
-                VisibleTrianglesCount += 3;
-            }
-        }
-    }
-    private bool VertexDeepTest(Vector3 Vertex, Vector2 CombinePart)
-    {
-        var GroundHigh1 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh2 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x - 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh3 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x + 1) * scale, (50 * CombinePart.y + Vertex.z) * scale) * 10);
-        var GroundHigh4 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z - 1) * scale) * 10);
-        var GroundHigh5 = (int)(Mathf.PerlinNoise((50 * CombinePart.x + Vertex.x) * scale, (50 * CombinePart.y + Vertex.z + 1) * scale) * 10);
-        var GroundHighMin = Mathf.Min(GroundHigh1, GroundHigh2, GroundHigh3, GroundHigh4, GroundHigh5);
-        return Vertex.y >= GroundHighMin - 1;
     }
 }
