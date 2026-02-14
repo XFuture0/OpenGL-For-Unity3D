@@ -67,9 +67,10 @@ public class GenPerlinNoiseMap : MonoBehaviour
     {
         foreach (var part in PartBlocks)
         {
-            bool IsFade = RefreshPartBlockLodLayer(part.Key,part.Value,CurPart, part.Key.PartOffect);
-            if (!IsFade)
+            var Distance = Vector3.Distance(part.Key.PartOffect, CurPart * 50 + new Vector3(25, 0, 25));
+            if (Distance < ViewDistance)
             {
+                RefreshPartBlockLodLayer(part.Key, part.Value, CurPart, part.Key.PartOffect);
                 Graphics.DrawMeshInstanced(part.Key.PartMesh, 0, mat, part.Value.ToArray(), 1);
             }
         }
@@ -146,9 +147,8 @@ public class GenPerlinNoiseMap : MonoBehaviour
         newMesh.RecalculateBounds();   // ÐÞ¸´°üÎ§ºÐ¼ÆËã
         return newMesh;
     }
-    private bool RefreshPartBlockLodLayer(PartBlockPro PartBlockPro, List<Matrix4x4> Transform, Vector3 CurPart, Vector3 PartOffect)
+    private void RefreshPartBlockLodLayer(PartBlockPro PartBlockPro, List<Matrix4x4> Transform, Vector3 CurPart, Vector3 PartOffect)
     {
-        bool IsFade = false;
         Vector3 PartOffect_Normal = new Vector3((PartOffect.x - 25) / 50, 0, (PartOffect.z - 25) / 50);
         var LodDistance = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z) ? math.abs(PartOffect_Normal.x - CurPart.x) : math.abs(PartOffect_Normal.z - CurPart.z);
         bool IsOffectX = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z);
@@ -167,9 +167,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
         {
             PartBlockPro.lodLayer = LodLayer.Lod_Bottom;
             PartBlockPro.PartMesh = new Mesh();
-            IsFade = true;
         }
-        return IsFade;
     }
 }
 [BurstCompile]
