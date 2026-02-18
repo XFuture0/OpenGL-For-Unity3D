@@ -209,7 +209,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 125
+  far clip plane: 150
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -530,8 +530,8 @@ MonoBehaviour:
   mat: {fileID: 2100000, guid: 0ac8f00dd460d9d4b952b99258707f45, type: 2}
   ViewDistance: 200
   LayerCount: 20
-  Lod1_LayerCount: 3
-  Lod2_LayerCount: 5
+  Lod1_LayerCount: 4
+  Lod2_LayerCount: 6
 --- !u!4 &2120121018
 Transform:
   m_ObjectHideFlags: 0
