@@ -16,4 +16,16 @@ public class InputManager : SingleTons<InputManager>
     {
         return Input.GetKey(KeyCode.Space);
     }
+    public float GetKey_MouseX()
+    {
+        return Input.GetAxis("Mouse X");
+    }
+    public float GetKey_MouseY()
+    {
+        return Input.GetAxis("Mouse Y");
+    }
+    public bool GetKeyDown_MouseLeft()
+    {
+        return Input.GetMouseButtonDown(0);
+    }
 }

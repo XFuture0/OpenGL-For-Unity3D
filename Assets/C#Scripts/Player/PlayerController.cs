@@ -7,6 +7,10 @@ public class PlayerController : MonoBehaviour
     public float Speed;
     public float JumpSpeed;
     public float MouseSensitivity;
+    private void Update()
+    {
+        DistroyBlock();
+    }
     private void FixedUpdate()
     {
         ViewRoll();
@@ -30,8 +34,8 @@ public class PlayerController : MonoBehaviour
     }
     private void ViewRoll()
     {
-        float mouseX = Input.GetAxis("Mouse X");
-        float mouseY = Input.GetAxis("Mouse Y");
+        float mouseX = InputManager.Instance.GetKey_MouseX();
+        float mouseY = InputManager.Instance.GetKey_MouseY();
         transform.Rotate(new Vector3(0,1,0) * mouseX * MouseSensitivity);
         transform.Rotate(new Vector3(-1,0,0) * mouseY * MouseSensitivity);
         if(transform.localRotation.eulerAngles.x > 80 && transform.localRotation.eulerAngles.x < 270)
@@ -51,6 +55,18 @@ public class PlayerController : MonoBehaviour
         if(InputManager.Instance.GetKey_Space())
         {
             transform.position += Vector3.up * JumpSpeed * Time.deltaTime;
+        }
+    }
+    private void DistroyBlock()
+    {
+        if (InputManager.Instance.GetKeyDown_MouseLeft())
+        {
+            BlockGraphicsRayCastHit hit = new BlockGraphicsRayCastHit();
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if(GraphicsRayCast.TryBlockGraphicsRayCast(ray, MapManager.Instance.GetCurPartBlocks(), out hit))
+            {
+                MapManager.Instance.BreakCurBlocks(hit.Position);
+            }
         }
     }
 }

@@ -1,7 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading.Tasks;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Jobs;
@@ -14,6 +12,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
     {
         public int Count;
         public Vector3 PartOffect;
+        public Vector2 CombinePart;
         public Mesh PartMesh;
         public Mesh Lod_Top;
         public Mesh Lod_Middle;
@@ -38,43 +37,46 @@ public class GenPerlinNoiseMap : MonoBehaviour
     private Dictionary<PartBlockPro,List<Matrix4x4>> PartBlocks = new Dictionary<PartBlockPro,List<Matrix4x4>>();
     private void Start()
     {
-        StartCoroutine(StartGenMap());
+        StartCoroutine(InitGenMap());
     }
-    private IEnumerator StartGenMap()
+    private IEnumerator InitGenMap()
     {
         int RoundCount = 1;
         int CurPartCount = 0;
         Vector2 CurPart = new Vector2(0, 0);
         AddGenPerlinNoiseMapPer(CurPart);
-        while (CurPartCount < LayerCount * LayerCount)
-        {
-            for(int i = 0; i < RoundCount; i++)
-            {
-                CurPart -= new Vector2(0, 1);
-                AddGenPerlinNoiseMapPer(CurPart);
-                yield return new WaitForSeconds(0.2f);
-            }
-            for (int i = 0; i < RoundCount; i++)
-            {
-                CurPart -= new Vector2(1, 0);
-                AddGenPerlinNoiseMapPer(CurPart);
-                yield return new WaitForSeconds(0.2f);
-            }
-            RoundCount++;
-            for (int i = 0; i < RoundCount; i++)
-            {
-                CurPart += new Vector2(0, 1);
-                AddGenPerlinNoiseMapPer(CurPart);
-                yield return new WaitForSeconds(0.2f);
-            }
-            for (int i = 0; i < RoundCount; i++)
-            {
-                CurPart += new Vector2(1, 0);
-                AddGenPerlinNoiseMapPer(CurPart);
-                yield return new WaitForSeconds(0.2f);
-            }
-            RoundCount++;
-        }
+        AddGenPerlinNoiseMapPer(new Vector2(1,0));
+        yield return new WaitForSeconds(0.2f);
+           while (CurPartCount < LayerCount * LayerCount)
+           {
+               for(int i = 0; i < RoundCount; i++)
+               {
+                   CurPart -= new Vector2(0, 1);
+                   AddGenPerlinNoiseMapPer(CurPart);
+                   yield return new WaitForSeconds(0.2f);
+               }
+               for (int i = 0; i < RoundCount; i++)
+               {
+                   CurPart -= new Vector2(1, 0);
+                   AddGenPerlinNoiseMapPer(CurPart);
+                   yield return new WaitForSeconds(0.2f);
+               }
+               RoundCount++;
+               for (int i = 0; i < RoundCount; i++)
+               {
+                   CurPart += new Vector2(0, 1);
+                   AddGenPerlinNoiseMapPer(CurPart);
+                   yield return new WaitForSeconds(0.2f);
+               }
+               for (int i = 0; i < RoundCount; i++)
+               {
+                   CurPart += new Vector2(1, 0);
+                   AddGenPerlinNoiseMapPer(CurPart);
+                   yield return new WaitForSeconds(0.2f);
+               }
+               RoundCount++;
+               CurPartCount += 3 * RoundCount - 3;
+           }
     }
     private void Update()
     {
@@ -109,34 +111,35 @@ public class GenPerlinNoiseMap : MonoBehaviour
             for (int n = 0; n < 50; n++)
             {
                 int GroundHigh = (int)(Mathf.PerlinNoise((50 * AddPart.x + m) * scale, (50 * AddPart.y + n) * scale) * 10);
-                for (int k = 0; k < GroundHigh; k++)
+                for (int k = 0; k <= GroundHigh; k++)
                 {
-                    BlockMatrices.Add(Matrix4x4.TRS(new Vector3(25 * AddPart.x + m, k, 25 * AddPart.y + n), Quaternion.identity, Vector3.one));
+                    BlockMatrices.Add(Matrix4x4.TRS(new Vector3(50 * AddPart.x + m, k, 50 * AddPart.y + n), Quaternion.identity, Vector3.one));
                     BlockCount++;
                 }
             }
         }
         var CurBlockPro = new PartBlockPro();
         CurBlockPro.PartOffect = new Vector3(50 * AddPart.x + 25, 0, 50 * AddPart.y + 25);
+        CurBlockPro.CombinePart = AddPart;
         if (!PartBlocks.ContainsKey(CurBlockPro))
         {
             var CurBlockMatrices = new List<Matrix4x4>(BlockCount);
             CurBlockMatrices.AddRange(BlockMatrices);
             CurBlockPro.Count = BlockCount;
-            CurBlockPro.Lod_Top = VertexCombine(BlockCount, BlockMatrices, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
-            CurBlockPro.Lod_Middle = VertexCombine(BlockCount, BlockMatrices, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
+            CurBlockPro.Lod_Top = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
+            CurBlockPro.Lod_Middle = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
             CurBlockPro.lodLayer = LodLayer.NULL;
             PartBlocks.Add(CurBlockPro, CurBlockMatrices);
         }
     }
-    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform, Vector3[] Cube_Vertex, int[] Cube_Index, Vector2[] Cube_UV)
+    private Mesh VertexCombine(int CombineCount, List<Matrix4x4> Transform,Vector2 CombinePart ,Vector3[] Cube_Vertex, int[] Cube_Index, Vector2[] Cube_UV)
     {
         Mesh newMesh = new Mesh();
         newMesh.indexFormat = IndexFormat.UInt32;
         NativeArray<Vector3> Position = new NativeArray<Vector3>(CombineCount, Allocator.TempJob);
         for(int i = 0;i < Transform.Count; i++)
         {
-            Position[i] = Transform[i].GetPosition();
+            Position[i] = Transform[i].GetPosition() - new Vector3(CombinePart.x,0,CombinePart.y) * 50;
         }
         NativeArray<Vector2> Mesh_UV = new NativeArray<Vector2>(Cube_UV.Length, Allocator.TempJob);
         NativeArray<Vector3> Mesh_Vertex = new NativeArray<Vector3>(Cube_Vertex.Length, Allocator.TempJob);
@@ -176,7 +179,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
     }
     private void RefreshPartBlockLodLayer(PartBlockPro PartBlockPro, List<Matrix4x4> Transform, Vector3 CurPart, Vector3 PartOffect)
     {
-        Vector3 PartOffect_Normal = new Vector3((PartOffect.x - 25) / 50, 0, (PartOffect.z - 25) / 50);
+        Vector3 PartOffect_Normal = new Vector3(PartBlockPro.CombinePart.x, 0, PartBlockPro.CombinePart.y);
         var LodDistance = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z) ? math.abs(PartOffect_Normal.x - CurPart.x) : math.abs(PartOffect_Normal.z - CurPart.z);
         bool IsOffectX = math.abs(PartOffect_Normal.x - CurPart.x) > math.abs(PartOffect_Normal.z - CurPart.z);
         if (PartOffect_Normal.x > CurPart.x && IsOffectX || PartOffect_Normal.z >CurPart.z && !IsOffectX) LodDistance++;
@@ -194,6 +197,36 @@ public class GenPerlinNoiseMap : MonoBehaviour
         {
             PartBlockPro.lodLayer = LodLayer.Lod_Bottom;
             PartBlockPro.PartMesh = new Mesh();
+        }
+    }
+    private void RefreshCurBlocks()
+    {
+        var CurBlockPro = new PartBlockPro();
+        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
+        foreach (var PartBlockPro_Key in PartBlocks.Keys)
+        { 
+            if(PartBlockPro_Key.PartOffect == CurBlockPro.PartOffect)
+            {
+                PartBlockPro_Key.Count--;
+                PartBlockPro_Key.Lod_Top = VertexCombine(PartBlockPro_Key.Count, PartBlocks[PartBlockPro_Key], PartBlockPro_Key.CombinePart, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
+                PartBlockPro_Key.Lod_Middle = VertexCombine(PartBlockPro_Key.Count, PartBlocks[PartBlockPro_Key], PartBlockPro_Key.CombinePart, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
+                PartBlockPro_Key.lodLayer = LodLayer.NULL;
+            }
+        }
+    }
+    public List<Matrix4x4> GetCurPartBlocks()
+    {
+        var CurBlockPro = new PartBlockPro();
+        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
+        return PartBlocks[CurBlockPro];
+    }
+    public void BreakCurBlocks(Matrix4x4 BlockMatrix)
+    {
+        var CurBlockPro = new PartBlockPro();
+        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
+        if (PartBlocks[CurBlockPro].Remove(BlockMatrix))
+        {
+            RefreshCurBlocks();
         }
     }
 }
