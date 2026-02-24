@@ -1,4 +1,4 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -10,6 +10,7 @@ public class PlayerController : MonoBehaviour
     private void Update()
     {
         BreakBlock();
+        CreateBlock();
     }
     private void FixedUpdate()
     {
@@ -66,6 +67,37 @@ public class PlayerController : MonoBehaviour
             if(GraphicsRayCast.TryBlockGraphicsRayCast(ray, GraphicsRayCast.GetRayCastPartBlocks(ray,MapManager.Instance.genPerlinNoiseMap.PartBlocks), out hit))
             {
                 MapManager.Instance.BreakBlocks(hit.Position);
+            }
+        }
+    }
+    private void CreateBlock()
+    {
+        if (InputManager.Instance.GetKeyDown_MouseRight())
+        {
+            BlockGraphicsRayCastHit hit = new BlockGraphicsRayCastHit();
+            List<Vector3> Angles = new List<Vector3>(3);
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (GraphicsRayCast.TryBlockGraphicsRayCast(ray, GraphicsRayCast.GetRayCastPartBlocks(ray, MapManager.Instance.genPerlinNoiseMap.PartBlocks), out hit))
+            {
+                Vector3 LocalRay = ray.origin - hit.Position.GetPosition();
+                if (Vector3.Dot(LocalRay, new Vector3(1, 0, 0)) > 0) Angles.Add(new Vector3(1,0,0));
+                if (Vector3.Dot(LocalRay, new Vector3(-1, 0, 0)) > 0) Angles.Add(new Vector3(-1,0,0));
+                if (Vector3.Dot(LocalRay, new Vector3(0, 0, 1)) > 0) Angles.Add(new Vector3(0,0,1));
+                if (Vector3.Dot(LocalRay, new Vector3(0, 0, -1)) > 0) Angles.Add(new Vector3(0,0,-1));
+                if (Vector3.Dot(LocalRay, new Vector3(0, 1, 0)) > 0) Angles.Add(new Vector3(0, 1, 0));
+                if (Vector3.Dot(LocalRay, new Vector3(0, -1, 0)) > 0) Angles.Add(new Vector3(0, -1, 0));
+                float MinAngle = int.MaxValue;
+                Vector3 AngleVector = Vector3.zero;
+                foreach (var Angle in Angles)
+                {
+                    if(Vector3.Angle(Angle, LocalRay) < MinAngle)
+                    {
+                        MinAngle = Vector3.Angle(Angle, LocalRay);
+                        AngleVector = Angle;
+                    }
+                }
+                hit.Position.SetTRS(hit.Position.GetPosition() + AngleVector, Quaternion.identity,new Vector3(1,1,1));
+                MapManager.Instance.CreateBlocks(hit.Position);
             }
         }
     }

@@ -28,4 +28,8 @@ public class InputManager : SingleTons<InputManager>
     {
         return Input.GetMouseButtonDown(0);
     }
+    public bool GetKeyDown_MouseRight()
+    {
+        return Input.GetMouseButtonDown(1);
+    }
 }
