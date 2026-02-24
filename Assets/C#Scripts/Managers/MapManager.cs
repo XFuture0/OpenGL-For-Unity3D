@@ -10,12 +10,12 @@ public class MapManager : SingleTons<MapManager>
     {
         base.Awake();
     }
-    public List<Matrix4x4> GetCurPartBlocks()
+    public void BreakBlocks(Matrix4x4 BlockMatrix)
     {
-        return genPerlinNoiseMap.GetCurPartBlocks();
+        genPerlinNoiseMap.BreakBlocks(BlockMatrix);
     }
-    public void BreakCurBlocks(Matrix4x4 BlockMatrix)
+    public void CreateBlocks(Matrix4x4 BlockMatrix)
     {
-        genPerlinNoiseMap.BreakCurBlocks(BlockMatrix);
+        genPerlinNoiseMap.CreateBlocks(BlockMatrix);
     }
 }

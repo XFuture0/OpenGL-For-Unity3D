@@ -1,32 +1,34 @@
 using System.Collections;
 using System.Collections.Generic;
 using Unity.Burst;
+using Unity.Burst.CompilerServices;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
+public class PartBlockPro
+{
+    public int Count;
+    public Vector3 PartOffect;
+    public Vector2 CombinePart;
+    public Mesh PartMesh;
+    public Mesh Lod_Top;
+    public Mesh Lod_Middle;
+    public Bounds PartBound;
+    public LodLayer lodLayer;
+    public override bool Equals(object obj)
+    {
+        return obj is PartBlockPro other &&
+           PartOffect == other.PartOffect;
+    }
+    public override int GetHashCode()
+    {
+        return PartOffect.GetHashCode();
+    }
+}
 public class GenPerlinNoiseMap : MonoBehaviour
 {
-    private class PartBlockPro
-    {
-        public int Count;
-        public Vector3 PartOffect;
-        public Vector2 CombinePart;
-        public Mesh PartMesh;
-        public Mesh Lod_Top;
-        public Mesh Lod_Middle;
-        public LodLayer lodLayer;
-        public override bool Equals(object obj)
-        {
-            return obj is PartBlockPro other &&
-               PartOffect == other.PartOffect;
-        }
-        public override int GetHashCode()
-        {
-            return PartOffect.GetHashCode();
-        }
-    }
     public float scale;
     public Material mat;
     public float ViewDistance;
@@ -34,7 +36,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
     public int Lod1_LayerCount;
     public int Lod2_LayerCount;
     private Vector3 CurPart;
-    private Dictionary<PartBlockPro,List<Matrix4x4>> PartBlocks = new Dictionary<PartBlockPro,List<Matrix4x4>>();
+    public Dictionary<PartBlockPro,List<Matrix4x4>> PartBlocks = new Dictionary<PartBlockPro,List<Matrix4x4>>();
     private void Start()
     {
         StartCoroutine(InitGenMap());
@@ -129,6 +131,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
             CurBlockPro.Lod_Top = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
             CurBlockPro.Lod_Middle = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
             CurBlockPro.lodLayer = LodLayer.NULL;
+            CurBlockPro.PartBound = new Bounds(CurBlockPro.PartOffect, new Vector3(50.0f, 10.0f, 50.0f));
             PartBlocks.Add(CurBlockPro, CurBlockMatrices);
         }
     }
@@ -199,35 +202,41 @@ public class GenPerlinNoiseMap : MonoBehaviour
             PartBlockPro.PartMesh = new Mesh();
         }
     }
-    private void RefreshCurBlocks()
+    private void RefreshCurBlocks(Vector3 BreakPart,bool IsCreate)
     {
         var CurBlockPro = new PartBlockPro();
-        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
+        CurBlockPro.PartOffect = BreakPart * 50 + new Vector3(25, 0, 25);
         foreach (var PartBlockPro_Key in PartBlocks.Keys)
         { 
             if(PartBlockPro_Key.PartOffect == CurBlockPro.PartOffect)
             {
-                PartBlockPro_Key.Count--;
+                if(IsCreate) PartBlockPro_Key.Count++;
+                else if(!IsCreate) PartBlockPro_Key.Count--;
                 PartBlockPro_Key.Lod_Top = VertexCombine(PartBlockPro_Key.Count, PartBlocks[PartBlockPro_Key], PartBlockPro_Key.CombinePart, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
                 PartBlockPro_Key.Lod_Middle = VertexCombine(PartBlockPro_Key.Count, PartBlocks[PartBlockPro_Key], PartBlockPro_Key.CombinePart, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
                 PartBlockPro_Key.lodLayer = LodLayer.NULL;
             }
         }
     }
-    public List<Matrix4x4> GetCurPartBlocks()
+    public void BreakBlocks(Matrix4x4 BlockMatrix)
     {
-        var CurBlockPro = new PartBlockPro();
-        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
-        return PartBlocks[CurBlockPro];
+        var BreakBlockPro = new PartBlockPro();
+        Vector3 BreakPart = new Vector3((int)(BlockMatrix.GetPosition().x / 50),0,(int)(BlockMatrix.GetPosition().z / 50));
+        if(BlockMatrix.GetPosition().x < 0) BreakPart.x--;
+        if(BlockMatrix.GetPosition().z < 0) BreakPart.z--;
+        BreakBlockPro.PartOffect = new Vector3(BreakPart.x,0,BreakPart.z) * 50 + new Vector3(25, 0, 25);
+        PartBlocks[BreakBlockPro].Remove(BlockMatrix);
+        RefreshCurBlocks(BreakPart, false);
     }
-    public void BreakCurBlocks(Matrix4x4 BlockMatrix)
+    public void CreateBlocks(Matrix4x4 BlockMatrix)
     {
-        var CurBlockPro = new PartBlockPro();
-        CurBlockPro.PartOffect = CurPart * 50 + new Vector3(25, 0, 25);
-        if (PartBlocks[CurBlockPro].Remove(BlockMatrix))
-        {
-            RefreshCurBlocks();
-        }
+        var BreakBlockPro = new PartBlockPro();
+        Vector3 BreakPart = new Vector3((int)(BlockMatrix.GetPosition().x / 50), 0, (int)(BlockMatrix.GetPosition().z / 50));
+        if (BlockMatrix.GetPosition().x < 0) BreakPart.x--;
+        if (BlockMatrix.GetPosition().z < 0) BreakPart.z--;
+        BreakBlockPro.PartOffect = new Vector3(BreakPart.x, 0, BreakPart.z) * 50 + new Vector3(25, 0, 25);
+        PartBlocks[BreakBlockPro].Add(BlockMatrix);
+        RefreshCurBlocks(BreakPart, true);
     }
 }
 [BurstCompile]

@@ -9,7 +9,7 @@ public class PlayerController : MonoBehaviour
     public float MouseSensitivity;
     private void Update()
     {
-        DistroyBlock();
+        BreakBlock();
     }
     private void FixedUpdate()
     {
@@ -57,15 +57,15 @@ public class PlayerController : MonoBehaviour
             transform.position += Vector3.up * JumpSpeed * Time.deltaTime;
         }
     }
-    private void DistroyBlock()
+    private void BreakBlock()
     {
         if (InputManager.Instance.GetKeyDown_MouseLeft())
         {
             BlockGraphicsRayCastHit hit = new BlockGraphicsRayCastHit();
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if(GraphicsRayCast.TryBlockGraphicsRayCast(ray, MapManager.Instance.GetCurPartBlocks(), out hit))
+            if(GraphicsRayCast.TryBlockGraphicsRayCast(ray, GraphicsRayCast.GetRayCastPartBlocks(ray,MapManager.Instance.genPerlinNoiseMap.PartBlocks), out hit))
             {
-                MapManager.Instance.BreakCurBlocks(hit.Position);
+                MapManager.Instance.BreakBlocks(hit.Position);
             }
         }
     }
