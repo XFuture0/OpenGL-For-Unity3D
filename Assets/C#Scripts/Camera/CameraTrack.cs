@@ -5,7 +5,7 @@ using UnityEngine;
 public class CameraTrack : MonoBehaviour
 {
     public GameObject Target;
-    private void Update()
+    private void FixedUpdate()
     {
         transform.position = Target.transform.position;
         transform.rotation = Target.transform.rotation;

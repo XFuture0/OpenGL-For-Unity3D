@@ -131,7 +131,7 @@ public class GenPerlinNoiseMap : MonoBehaviour
             CurBlockPro.Lod_Top = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Top.Cube_Vertex, StaticBlock_Lod_Top.Cube_Index, StaticBlock_Lod_Top.Cube_UV);
             CurBlockPro.Lod_Middle = VertexCombine(BlockCount, CurBlockMatrices, AddPart, StaticBlock_Lod_Middle.Cube_Vertex, StaticBlock_Lod_Middle.Cube_Index, StaticBlock_Lod_Middle.Cube_UV);
             CurBlockPro.lodLayer = LodLayer.NULL;
-            CurBlockPro.PartBound = new Bounds(CurBlockPro.PartOffect, new Vector3(50.0f, 10.0f, 50.0f));
+            CurBlockPro.PartBound = new Bounds(CurBlockPro.PartOffect, new Vector3(50.0f, 20.0f, 50.0f));
             PartBlocks.Add(CurBlockPro, CurBlockMatrices);
         }
     }

@@ -6,7 +6,10 @@ public class PlayerController : MonoBehaviour
 {
     public float Speed;
     public float JumpSpeed;
-    public float MouseSensitivity;
+    public float MouseSensitivityX;
+    public float MouseSensitivityY;
+    private float YRotation;
+    private float XRotation;
     private void Update()
     {
         BreakBlock();
@@ -35,21 +38,12 @@ public class PlayerController : MonoBehaviour
     }
     private void ViewRoll()
     {
-        float mouseX = InputManager.Instance.GetKey_MouseX();
-        float mouseY = InputManager.Instance.GetKey_MouseY();
-        transform.Rotate(new Vector3(0,1,0) * mouseX * MouseSensitivity);
-        transform.Rotate(new Vector3(-1,0,0) * mouseY * MouseSensitivity);
-        if(transform.localRotation.eulerAngles.x > 80 && transform.localRotation.eulerAngles.x < 270)
-        {
-            transform.localRotation = Quaternion.Euler(new Vector3(80,transform.localRotation.eulerAngles.y,0));
-        }
-        else if(transform.localRotation.eulerAngles.x < -80)
-        {
-            transform.localRotation = Quaternion.Euler(new Vector3(-80,transform.localRotation.eulerAngles.y,0));
-        }
-        else
-        {transform.rotation = Quaternion.Euler(new Vector3(transform.localRotation.eulerAngles.x,transform.localRotation.eulerAngles.y,0));
-        }
+        float mouseX = InputManager.Instance.GetKey_MouseX() * MouseSensitivityX * Time.deltaTime;
+        float mouseY = InputManager.Instance.GetKey_MouseY() * MouseSensitivityY * Time.deltaTime;
+        YRotation += mouseX;
+        XRotation -= mouseY;
+        XRotation = Mathf.Clamp(XRotation, -90, 90);
+        transform.rotation = Quaternion.Euler(XRotation, YRotation, 0);
     }
     private void Jump()
     {
